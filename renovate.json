@@ -1,13 +1,22 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:base"],
+  "extends": [
+    "config:recommended"
+  ],
   "packageRules": [
     {
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["docker.n8n.io/n8nio/n8n", "ghcr.io/n8n-io/runners"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "docker.n8n.io/n8nio/n8n",
+        "ghcr.io/n8n-io/runners"
+      ],
       "groupName": "n8n base images",
       "groupSlug": "n8n-base-images",
-      "lockFileMaintenance": false
+      "lockFileMaintenance": {
+        "enabled": false
+      }
     }
   ]
 }

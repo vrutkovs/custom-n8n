@@ -23,6 +23,7 @@ import difflib
 import os
 import re
 import sys
+import time
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -120,7 +121,7 @@ class TodoistTask(BaseModel):
     @property
     def priority_text(self) -> str:
         """Convert priority number to text."""
-        priority_map = {4: "High", 3: "Medium", 2: "Low", 1: "None"}
+        priority_map = {4: "High", 3: "Normal", 2: "Low", 1: "None"}
         return priority_map.get(self.priority, "None")
 
     @classmethod
@@ -128,7 +129,6 @@ class TodoistTask(BaseModel):
         cls,
         api_task: Any,
         is_completed: bool = False,
-        completed_date: str | None = None,
     ) -> "TodoistTask":
         """Create TodoistTask from the API task object."""
         # Convert due object to dict if present
@@ -154,7 +154,7 @@ class TodoistTask(BaseModel):
             url=api_task.url,
             is_completed=is_completed,
             created_at=str(api_task.created_at),
-            completed_date=completed_date,
+            completed_date=str(api_task.completed_at),
             creator_id=api_task.creator_id or "",
             assignee_id=api_task.assignee_id,
             assigner_id=api_task.assigner_id,
@@ -230,11 +230,18 @@ class TodoistClient:
     ) -> list[TodoistTask]:
         """Get tasks, optionally filtered by project and/or filter expression."""
         try:
+            if filter_expr:
+                tasks_iter = self.api.filter_tasks(query=filter_expr)
+                tasks = [
+                    TodoistTask.from_api_task(t) for page in tasks_iter for t in page
+                ]
+                if project_id:
+                    tasks = [t for t in tasks if t.project_id == project_id]
+                return tasks
+
             kwargs = {}
             if project_id:
                 kwargs["project_id"] = project_id
-            if filter_expr:
-                kwargs["filter"] = filter_expr
 
             tasks = self.api.get_tasks(**kwargs)
             return [TodoistTask.from_api_task(t) for page in tasks for t in page]
@@ -269,13 +276,50 @@ class TodoistClient:
                         TodoistTask.from_api_task(
                             item,
                             is_completed=True,
-                            completed_date=completion_date.isoformat(),
                         )
                     )
             return all_completed_tasks
         except Exception as e:
             raise TodoistAPIError(
                 f"Failed to fetch completed tasks for date {completion_date.isoformat()}: {e}"
+            ) from e
+
+    def get_recently_completed_tasks(self, days: int = 7) -> list[TodoistTask]:
+        """Fetch recently completed tasks."""
+        all_completed_tasks = {}
+        try:
+            until = datetime.datetime.now()
+            since = until - datetime.timedelta(days=days)
+
+            completed_items_iterator = self.api.get_completed_tasks_by_completion_date(
+                since=since, until=until
+            )
+
+            for items_page in completed_items_iterator:
+                for item in items_page:
+                    if item.id not in all_completed_tasks:
+                        all_completed_tasks[item.id] = TodoistTask.from_api_task(
+                            item,
+                            is_completed=True,
+                        )
+
+            return list(all_completed_tasks.values())
+        except Exception as e:
+            raise TodoistAPIError(
+                f"Failed to fetch recently completed tasks: {e}"
+            ) from e
+
+    def get_tasks_by_creation_date(
+        self, creation_date: datetime.date
+    ) -> list[TodoistTask]:
+        """Fetch tasks created on a specific date."""
+        try:
+            date_str = creation_date.strftime("%Y-%m-%d")
+            tasks_iter = self.api.filter_tasks(query=f"created: {date_str}")
+            return [TodoistTask.from_api_task(t) for page in tasks_iter for t in page]
+        except Exception as e:
+            raise TodoistAPIError(
+                f"Failed to fetch tasks created on {creation_date.isoformat()}: {e}"
             ) from e
 
 
@@ -363,6 +407,7 @@ class ObsidianExporter:
     ) -> str:
         """Generate YAML frontmatter for a task."""
         frontmatter = ["---"]
+        frontmatter.append("category: task")
         frontmatter.append(f"title: {self.format_yaml_string(task.content)}")
         frontmatter.append(f"todoist_id: {self.format_yaml_string(task.id)}")
         frontmatter.append(f"project: {self.format_yaml_string(project.name)}")
@@ -372,19 +417,20 @@ class ObsidianExporter:
             frontmatter.append(f"section: {self.format_yaml_string(section.name)}")
             frontmatter.append(f'section_id: "{section.id}"')
 
-        frontmatter.append(f'created: "{task.created_at}"')
+        frontmatter.append(f'created: "{task.created_at[:10]}"')
 
         if task.due_date:
             frontmatter.append(f'due_date: "{task.due_date}"')
 
-        frontmatter.append(f"priority: {task.priority}")
-        frontmatter.append(f'priority_text: "{task.priority_text}"')
+        frontmatter.append(f"priority: {task.priority_text}")
 
         if task.labels:
             labels_str = '", "'.join(task.labels)
             frontmatter.append(f'labels: ["{labels_str}"]')
 
         frontmatter.append(f"completed: {str(task.is_completed).lower()}")
+        if task.is_completed:
+            frontmatter.append("status: done")
 
         if task.completed_date:
             frontmatter.append(f'completed_date: "{task.completed_date}"')
@@ -540,15 +586,20 @@ def export_tasks_internal(
             datetime.datetime.combine(target_date, datetime.time.min)
         )
         tasks.extend(completed_tasks_on_date)
+
+        # Also fetch tasks created on this date
+        created_tasks_on_date = client.get_tasks_by_creation_date(target_date)
+        seen_ids = {t.id for t in tasks}
+        for t in created_tasks_on_date:
+            if t.id not in seen_ids:
+                tasks.append(t)
     else:
         # If no target_date, proceed with standard task fetching.
         # Get tasks
         tasks = client.get_tasks()
 
         # Fetch completed tasks (always include completed)
-        completed_tasks_general = client.get_completed_tasks_by_completion_date(
-            datetime.datetime.now()
-        )
+        completed_tasks_general = client.get_recently_completed_tasks(days=7)
         tasks.extend(completed_tasks_general)
 
     if not tasks:

@@ -349,9 +349,11 @@ class ObsidianExporter:
 
     def sanitize_filename(self, name: str) -> str:
         """Sanitize a string for use as a filename."""
+        # If the name is a markdown link like [foo](url), keep just the link text
+        name = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", name)
         ascii_name = unicodedata.normalize("NFKD", name)
         ascii_name = ascii_name.encode("ascii", "ignore").decode("ascii")
-        sanitized = re.sub(r'[<>:"/\\|?*]', "_", ascii_name)
+        sanitized = re.sub(r"[\[\]#^|\\/:?]", "_", ascii_name)
         sanitized = re.sub(r"_+", "_", sanitized)
         sanitized = sanitized.strip("_ ")
         if len(sanitized) > 200:
@@ -491,7 +493,7 @@ class ObsidianExporter:
 
     def get_output_path(self, task: TodoistTask, project: TodoistProject) -> Path:  # noqa: ARG002
         """Determine the output path for a task note."""
-        filename = task.id
+        filename = self.sanitize_filename(task.content)
         return self.output_dir / f"{filename}.md"
 
     def export_task(

@@ -1,4 +1,4 @@
-FROM docker.n8n.io/n8nio/n8n:2.18.0
+FROM docker.n8n.io/n8nio/n8n:2.18.1
 RUN npm install gray-matter markdown-it n8n-nodes-fs n8n-nodes-markdown-to-json n8n-nodes-obsidian n8n-nodes-execute-command-plus @n8n/task-runner
 USER 0
 # Reinstall apk-tools

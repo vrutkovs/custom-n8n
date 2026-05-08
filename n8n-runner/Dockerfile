@@ -1,4 +1,4 @@
-FROM ghcr.io/n8n-io/runners:2.20.5
+FROM ghcr.io/n8n-io/runners:2.20.6
 USER root
 RUN cd /opt/runners/task-runner-python && uv pip install pytz pyyaml requests
 COPY n8n-task-runners.json /etc/n8n-task-runners.json

@@ -8,7 +8,7 @@ RUN npm install --prefix /deps \
     n8n-nodes-obsidian \
     n8n-nodes-execute-command-plus
 
-FROM ghcr.io/n8n-io/n8n:2.39.0
+FROM ghcr.io/n8n-io/n8n:2.39.1
 USER root
 COPY --from=deps /deps/node_modules /home/node/node_modules
 COPY apk-tools-static-2.14.9-r3.apk /tmp

@@ -1,4 +1,4 @@
-FROM node:22-alpine3.24 AS deps
+FROM node:24-alpine3.24 AS deps
 RUN apk add --no-cache python3 make g++
 RUN npm install --prefix /deps \
     gray-matter \

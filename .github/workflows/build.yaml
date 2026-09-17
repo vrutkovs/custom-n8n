@@ -38,7 +38,7 @@ jobs:
       - name: Extract version from Dockerfile
         id: version
         run: |
-          VERSION=$(grep -m1 '^FROM' ${{ matrix.image }}/Dockerfile | cut -d: -f2)
+          VERSION=$(grep '^FROM ghcr.io/n8n-io/n8n:' "n8n/Dockerfile" | tail -n1 | sed -E 's/.*n8n:([^[:space:]]+).*/\1/')
           echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata
